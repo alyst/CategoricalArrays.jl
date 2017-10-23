@@ -1,12 +1,20 @@
-# union of all categorical value types
+# "categorical value" trait
+abstract type CatValueSupport end
+struct HasCatValue <: CatValueSupport end
+struct NoCatValue <: CatValueSupport end
+
+# checks whether the type has "categorical value" trait
+hascatvalue(::Type) = NoCatValue # by default types do not have "categorical value" trait
+hascatvalue(::Type{Union{}}) = NoCatValue # prevent incorrect dispatch to Type{<:CatValue} method
+
+iscatvalue(::Type{T}) where {T} = hascatvalue(T) === HasCatValue
+iscatvalue(x::Any) = iscatvalue(typeof(x))
+
+# union of categorical value types implemented in this package
 const CatValue{R} = Union{CategoricalValue{T, R} where T,
                           CategoricalString{R}}
 
-# checks whether the type is categorical value
-iscatvalue(::Type) = false
-iscatvalue(::Type{Union{}}) = false # prevent incorrect dispatch to Type{<:CatValue} method
-iscatvalue(::Type{<:CatValue}) = true
-iscatvalue(x::Any) = iscatvalue(typeof(x))
+hascatvalue(::Type{<:CatValue}) = HasCatValue
 
 leveltype(::Type{<:CategoricalValue{T}}) where {T} = T
 leveltype(::Type{<:CategoricalString}) = String
@@ -24,26 +32,25 @@ pool(x::CatValue) = x.pool
 level(x::CatValue) = x.level
 
 # extract the type of the original value from array eltype `T`
-unwrap_catvaluetype(::Type{T}) where {T} = T
-unwrap_catvaluetype(::Type{T}) where {T >: Null} =
-    Union{unwrap_catvaluetype(Nulls.T(T)), Null}
-unwrap_catvaluetype(::Type{Union{}}) = Union{} # prevent incorrect dispatch to T<:CatValue method
-unwrap_catvaluetype(::Type{Any}) = Any # prevent recursion in T>:Null method
-unwrap_catvaluetype(::Type{T}) where {T <: CatValue} = leveltype(T)
+function unwrap_catvaluetype(::Type{T}) where T
+    V = Nulls.T(T)
+    S = unwrap_catvaluetype(hascatvalue(V), V)
+    return T >: Null ? Union{S, Null} : S
+end
+unwrap_catvaluetype(::Type{NoCatValue}, ::Type{T}) where {T} = T
+unwrap_catvaluetype(::Type{HasCatValue}, ::Type{T}) where {T} = leveltype(T)
 
 # get the categorical value type given value type `T` and reference type `R`
-catvaluetype(::Type{T}, ::Type{R}) where {T >: Null, R} =
-    catvaluetype(Nulls.T(T), R)
-catvaluetype(::Type{T}, ::Type{R}) where {T <: CatValue, R} =
+function catvaluetype(::Type{T}, ::Type{R}) where {T, R}
+    V = Nulls.T(T)
+    catvaluetype(hascatvalue(V), V, R)
+end
+catvaluetype(::Type{HasCatValue}, ::Type{T}, ::Type{R}) where {T, R} =
     catvaluetype(leveltype(T), R)
-catvaluetype(::Type{Any}, ::Type{R}) where {R} =
-    CategoricalValue{Any, R}  # prevent recursion in T>:Null method
-catvaluetype(::Type{T}, ::Type{R}) where {T, R} =
+catvaluetype(::Type{NoCatValue}, ::Type{T}, ::Type{R}) where {T, R} =
     CategoricalValue{T, R}
-catvaluetype(::Type{<:AbstractString}, ::Type{R}) where {R} =
+catvaluetype(::Type{NoCatValue}, ::Type{<:AbstractString}, ::Type{R}) where {R} =
     CategoricalString{R}
-# to prevent incorrect dispatch to T<:CatValue method
-catvaluetype(::Type{Union{}}, ::Type{R}) where {R} = CategoricalValue{Union{}, R}
 
 Base.get(x::CatValue) = index(pool(x))[level(x)]
 order(x::CatValue) = order(pool(x))[level(x)]

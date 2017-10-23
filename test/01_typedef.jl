@@ -1,7 +1,7 @@
 module TestTypeDef
     using Base.Test
     using CategoricalArrays
-    using CategoricalArrays: DefaultRefType, level,  reftype, leveltype, catvalue, iscatvalue
+    using CategoricalArrays: DefaultRefType, NoCatValue, HasCatValue, level, reftype, leveltype, catvalue, iscatvalue
 
     pool = CategoricalPool(
         [
@@ -16,9 +16,14 @@ module TestTypeDef
         )
     )
 
-    @test iscatvalue(Int) == false
-    @test iscatvalue(Any) == false
-    @test iscatvalue(Null) == false
+    @test CategoricalArrays.hascatvalue(Int) === NoCatValue
+    @test CategoricalArrays.hascatvalue(Any) === NoCatValue
+    @test CategoricalArrays.hascatvalue(Null) === NoCatValue
+    @test CategoricalArrays.hascatvalue(Union{}) === NoCatValue
+
+    @test !iscatvalue(Int)
+    @test !iscatvalue(Any)
+    @test !iscatvalue(Null)
 
     @test isa(pool, CategoricalPool)
 
@@ -51,6 +56,7 @@ module TestTypeDef
 
         @test iscatvalue(x)
         @test iscatvalue(typeof(x))
+        @test CategoricalArrays.hascatvalue(typeof(x)) == HasCatValue
         @test eltype(x) === String
         @test eltype(typeof(x)) === String
         @test leveltype(x) === String
